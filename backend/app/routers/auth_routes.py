@@ -7,6 +7,7 @@ import json
 import uuid
 import io
 from pathlib import Path
+from ..config import LIMIT_VALUE
 
 router = APIRouter(tags=["auth"], prefix="/auth")
 
@@ -118,7 +119,7 @@ async def verify(photo: UploadFile = File(...), db: Session = Depends(get_db)):
 
         best_match = None
         best_distance = None
-        tolerance = 0.3
+        tolerance = LIMIT_VALUE
 
         for user in users:
             try:
