@@ -118,7 +118,7 @@ async def verify(photo: UploadFile = File(...), db: Session = Depends(get_db)):
 
         best_match = None
         best_distance = None
-        tolerance = 0.6
+        tolerance = 0.3
 
         for user in users:
             try:
