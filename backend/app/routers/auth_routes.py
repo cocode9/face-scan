@@ -5,6 +5,7 @@ import face_recognition
 import os
 import json
 import uuid
+import io
 from pathlib import Path
 
 router = APIRouter(tags=["auth"], prefix="/auth")
@@ -91,3 +92,65 @@ def login(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = auth.create_access_token({"sub": db_user.email})
     return {"access_token": token}
+
+
+@router.post("/verify")
+async def verify(photo: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not photo.content_type or not photo.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image",
+        )
+
+    try:
+        content = await photo.read()
+        image = face_recognition.load_image_file(io.BytesIO(content))
+        face_encodings = face_recognition.face_encodings(image)
+
+        if not face_encodings:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No face detected in the image. Please try again.",
+            )
+
+        unknown_encoding = face_encodings[0]
+        users = db.query(models.User).all()
+
+        best_match = None
+        best_distance = None
+        tolerance = 0.6
+
+        for user in users:
+            try:
+                photo_data = json.loads(user.photo)
+                known_encoding = photo_data.get("face_encoding")
+                if not known_encoding:
+                    continue
+            except Exception:
+                continue
+
+            distance = face_recognition.face_distance([known_encoding], unknown_encoding)[0]
+            is_match = distance <= tolerance
+            if is_match and (best_distance is None or distance < best_distance):
+                best_distance = distance
+                best_match = user
+
+        if not best_match:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Face verification failed",
+            )
+
+        return {
+            "success": True,
+            "message": "Face verified successfully!",
+            "user_id": best_match.id,
+            "distance": float(best_distance),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verifying face: {str(e)}",
+        )

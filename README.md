@@ -1,2 +1,0 @@
-# face-scan
-face scan
